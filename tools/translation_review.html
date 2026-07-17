@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Track B — Translation Review Tool</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --line:#2a2f3a;
+    --txt:#e6e9ef; --muted:#9aa3b2; --accent:#4f8cff; --good:#34c759;
+    --warn:#ff9f0a; --bad:#ff453a; --chip:#262b36;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  button{font:inherit;cursor:pointer}
+  textarea,input,select{font:inherit;color:var(--txt);background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;padding:8px}
+  textarea{width:100%;resize:vertical;min-height:64px}
+  .row{display:flex;gap:0;height:100vh}
+  /* sidebar */
+  #side{width:340px;min-width:280px;border-right:1px solid var(--line);
+    display:flex;flex-direction:column;background:var(--panel)}
+  #side header{padding:12px;border-bottom:1px solid var(--line)}
+  h1{font-size:15px;margin:0 0 8px}
+  .sub{color:var(--muted);font-size:12px}
+  .controls{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .controls button,.controls label.btn{background:var(--chip);border:1px solid var(--line);
+    color:var(--txt);border-radius:8px;padding:6px 9px;font-size:12px}
+  .controls button.on{border-color:var(--accent);color:var(--accent)}
+  #list{overflow:auto;flex:1}
+  .item{padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;
+    flex-direction:column;gap:4px}
+  .item:hover{background:var(--panel2)}
+  .item.active{background:#223; border-left:3px solid var(--accent);padding-left:9px}
+  .item .id{font-weight:600;font-size:12px;display:flex;justify-content:space-between;gap:6px}
+  .item .gist{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
+  .badges{display:flex;flex-wrap:wrap;gap:4px}
+  .b{font-size:10px;padding:1px 6px;border-radius:999px;border:1px solid var(--line)}
+  .b.draft{color:#ffd60a;border-color:#5c4d00;background:#2a2400}
+  .b.copy{color:#ff9f0a;border-color:#5a3a00;background:#2a1d00}
+  .b.disc{color:#ff453a;border-color:#5a1010;background:#2a0a0a}
+  .b.len{color:#64d2ff;border-color:#0a3a5a;background:#001f2a}
+  .b.script{color:#bf5af2;border-color:#3a1050;background:#1a0a2a}
+  .b.enc{color:#ff453a;border-color:#5a1010;background:#2a0a0a}
+  .b.ok{color:var(--good);border-color:#0a3a1a;background:#0a2a14}
+  .b.rev{color:#fff;border-color:#0a3a1a;background:#14532d}
+  .b.smoke{color:var(--muted);border-color:var(--line)}
+  /* main */
+  #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  #prog{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .bar{height:10px;background:var(--panel2);border-radius:999px;overflow:hidden;position:relative;margin-top:6px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,#34c759,#4f8cff)}
+  .bar .mile{position:absolute;top:-3px;width:2px;height:16px;background:#fff;opacity:.5}
+  .progrow{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  .stat{font-size:12px;color:var(--muted)}
+  .stat b{color:var(--txt);font-size:15px}
+  #editor{flex:1;overflow:auto;padding:16px;max-width:980px;width:100%}
+  .empty{color:var(--muted);padding:40px;text-align:center}
+  .fieldgrid{display:grid;grid-template-columns:1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h3{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .english{white-space:pre-wrap;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:10px;font-size:14px}
+  .scores{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
+  .scorebox label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+  .seg{display:flex;gap:4px}
+  .seg button{width:34px;height:30px;border-radius:6px;background:var(--chip);
+    border:1px solid var(--line);color:var(--txt)}
+  .seg button.sel{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .seg button.passhi{border-color:var(--good)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .actions button{padding:9px 14px;border-radius:9px;border:1px solid var(--line);background:var(--chip)}
+  .actions .accept{background:#14532d;border-color:#1c7a3f;color:#fff;font-weight:600}
+  .actions .reject{background:#3a0f0f;border-color:#7a1c1c;color:#fff;font-weight:600}
+  .hint{font-size:11px;color:var(--muted)}
+  kbd{background:var(--chip);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;
+    padding:1px 5px;font-size:11px;font-family:ui-monospace,monospace}
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .pill{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .pill.dirty{color:var(--warn);border-color:#5a3a00}
+  .pill.saved{color:var(--good);border-color:#0a3a1a}
+  select{padding:6px 8px}
+  .flaglist{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  a.help{color:var(--accent);text-decoration:none;font-size:12px}
+  details summary{cursor:pointer;color:var(--muted);font-size:12px}
+  .kbtable{font-size:12px;color:var(--muted);margin-top:8px}
+  .kbtable div{margin:2px 0}
+</style>
+</head>
+<body>
+<div class="row">
+  <aside id="side">
+    <header>
+      <h1>Track B Translation Review</h1>
+      <div class="sub">Read-only on source. Edits stay in-browser until you <b>Export</b>.</div>
+      <div class="controls">
+        <label class="btn" style="position:relative;overflow:hidden">
+          Load CSV
+          <input id="file" type="file" accept=".csv,text/csv"
+            style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+        </label>
+        <button id="resume" title="Reload autosaved session">Resume</button>
+        <button id="export">Export CSV</button>
+      </div>
+      <div class="controls">
+        <button id="fPending" class="on">Pending only</button>
+        <button id="sortSel">Sort: Priority</button>
+      </div>
+      <div class="sub" id="counts" style="margin-top:8px"></div>
+    </header>
+    <div id="list"></div>
+  </aside>
+
+  <main id="main">
+    <div id="prog">
+      <div class="progrow">
+        <div class="stat"><b id="nReviewed">0</b> / 115 reviewed</div>
+        <div class="stat">Pass-ready (both ≥4): <b id="nPass">0</b></div>
+        <div class="stat">Need draft: <b id="nDraft">0</b></div>
+        <div class="topbar" style="margin-left:auto">
+          <span class="pill" id="saveState">no file loaded</span>
+        </div>
+      </div>
+      <div class="bar"><i id="barFill" style="width:0%"></i><span class="mile" id="mile60"></span></div>
+      <div class="sub" style="margin-top:4px">White marker = G-translate-60 milestone (60 rows).
+        <details style="display:inline"><summary>flag legend & keys</summary>
+          <div class="kbtable">
+            <div><span class="b draft">DRAFT</span> empty Hindi/Hinglish — needs human translation</div>
+            <div><span class="b copy">COPY</span> target identical to English (copy-through)</div>
+            <div><span class="b disc">DISCLAIMER</span> contains model disclaimer / refusal text</div>
+            <div><span class="b len">LEN</span> suspicious length ratio vs English</div>
+            <div><span class="b script">SCRIPT</span> wrong script (Latin in Hindi / Devanagari in Hinglish)</div>
+            <div><span class="b enc">ENC</span> encoding / mojibake artifact</div>
+            <div style="margin-top:6px"><b>Keys:</b>
+              <kbd>j</kbd>/<kbd>k</kbd> next/prev ·
+              <kbd>1</kbd>–<kbd>5</kbd> meaning ·
+              <kbd>⇧1</kbd>–<kbd>⇧5</kbd> naturalness ·
+              <kbd>a</kbd> accept+next ·
+              <kbd>r</kbd> reject ·
+              <kbd>⌘/Ctrl+S</kbd> export</div>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div id="editor"><div class="empty">Click <b>Load CSV</b> and choose
+      <code>data/track_b/reviewed_translations.csv</code> to begin.</div></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+const COLS=["sample_id","english","hindi","hinglish","translation_source","reviewed",
+  "meaning_score","naturalness_score","surface_sensitivity_score","notes"];
+let rows=[], view=[], cur=0, fileName="reviewed_translations.csv";
+let pendingOnly=true, sortMode="priority", dirty=false;
+const LSKEY="trackb_review_v1";
+
+/* ---------- CSV parse / serialize (RFC4180, multiline-safe) ---------- */
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,"");
+  const out=[];let i=0,f="",rec=[],q=false;
+  while(i<text.length){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){f+='"';i+=2;continue;} q=false;i++;continue;}
+      f+=c;i++;continue;
+    }
+    if(c==='"'){q=true;i++;continue;}
+    if(c===','){rec.push(f);f="";i++;continue;}
+    if(c==='\r'){i++;continue;}
+    if(c==='\n'){rec.push(f);out.push(rec);rec=[];f="";i++;continue;}
+    f+=c;i++;
+  }
+  if(f.length||rec.length){rec.push(f);out.push(rec);}
+  return out;
+}
+function toObjects(grid){
+  if(!grid.length)return[];
+  const hdr=grid[0];
+  return grid.slice(1).filter(r=>r.length>1||(r.length===1&&r[0]!=="")).map(r=>{
+    const o={}; hdr.forEach((h,idx)=>o[h.trim()]=r[idx]!==undefined?r[idx]:"");
+    COLS.forEach(c=>{if(!(c in o))o[c]="";});
+    return o;
+  });
+}
+function esc(v){v=(v==null?"":String(v));
+  return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function serialize(objs){
+  const lines=[COLS.join(",")];
+  for(const o of objs)lines.push(COLS.map(c=>esc(o[c])).join(","));
+  return lines.join("\r\n")+"\r\n";
+}
+
+/* ---------- flag logic ---------- */
+const DISC_RE=/(disclaimer|i (cannot|can't|am unable|won't)|as an ai|i'm sorry|i am sorry|important note|i must (decline|refuse)|provide.*illegal|seek professional|not appropriate)/i;
+function devRatio(s){if(!s)return 0;const m=s.match(/[\u0900-\u097F]/g);
+  const letters=s.replace(/[^A-Za-z\u0900-\u097F]/g,"").length;
+  return letters? (m?m.length:0)/letters : 0;}
+function hasEnc(s){return /\uFFFD|Ã.|Â.|à¤|â€/.test(s||"");}
+function flagsFor(o){
+  const f=[];
+  const en=(o.english||"").trim(), hi=(o.hindi||"").trim(), hl=(o.hinglish||"").trim();
+  if(!hi||!hl)f.push("draft");
+  if(en){
+    if(hi&&hi.toLowerCase()===en.toLowerCase())f.push("copy");
+    else if(hl&&hl.toLowerCase()===en.toLowerCase())f.push("copy");
+  }
+  if(DISC_RE.test(hi)||DISC_RE.test(hl))f.push("disc");
+  if(en){
+    for(const t of [hi,hl]){ if(t){const r=t.length/en.length; if(r<0.35||r>3.2){f.push("len");break;}}}
+  }
+  if(hi&&devRatio(hi)<0.5)f.push("script");        // Hindi should be Devanagari
+  if(hl&&devRatio(hl)>0.3)f.push("script");          // Hinglish should be Roman
+  if(hasEnc(hi)||hasEnc(hl))f.push("enc");
+  return [...new Set(f)];
+}
+const SEV={disc:6,enc:6,copy:5,script:4,len:3,draft:2};
+function priorityScore(o){
+  if(String(o.reviewed).toLowerCase()==="true")return -1; // done -> bottom
+  const fl=flagsFor(o);
+  let s=0; fl.forEach(f=>s=Math.max(s,SEV[f]||0));
+  // rows with content but problems rank above totally-empty drafts (quicker wins)
+  if(fl.includes("draft")&&fl.length===1)s=1;
+  return s;
+}
+function isPass(o){
+  const m=+o.meaning_score, n=+o.naturalness_score;
+  return m>=4&&n>=4;
+}
+function isReviewed(o){return String(o.reviewed).toLowerCase()==="true";}
+function isSmoke(o){return /smoke/i.test(o.notes||"")||/smoke/i.test(o.translation_source||"");}
+
+/* ---------- rendering ---------- */
+const $=id=>document.getElementById(id);
+function rebuildView(){
+  view=rows.map((o,idx)=>({o,idx}));
+  if(pendingOnly)view=view.filter(x=>!isReviewed(x.o));
+  if(sortMode==="priority")view.sort((a,b)=>priorityScore(b.o)-priorityScore(a.o)||a.idx-b.idx);
+  else view.sort((a,b)=>String(a.o.sample_id).localeCompare(String(b.o.sample_id)));
+  if(cur>=view.length)cur=Math.max(0,view.length-1);
+}
+function badge(f){const names={draft:"DRAFT",copy:"COPY",disc:"DISCLAIMER",len:"LEN",script:"SCRIPT",enc:"ENC"};
+  return `<span class="b ${f}">${names[f]||f}</span>`;}
+function renderList(){
+  const el=$("list");el.innerHTML="";
+  view.forEach((x,vi)=>{
+    const o=x.o, fl=flagsFor(o);
+    const d=document.createElement("div");
+    d.className="item"+(vi===cur?" active":"");
+    const rev=isReviewed(o)?`<span class="b ${isPass(o)?'rev':'ok'}">${isPass(o)?'REVIEWED':'rev?'}</span>`:"";
+    const smk=isSmoke(o)?`<span class="b smoke">smoke</span>`:"";
+    d.innerHTML=`<div class="id"><span>${o.sample_id}</span><span class="badges">${rev}${smk}</span></div>
+      <div class="gist">${escapeHtml((o.english||"").slice(0,70))}</div>
+      <div class="badges">${fl.map(badge).join("")||'<span class="b ok">clean</span>'}</div>`;
+    d.onclick=()=>{cur=vi;renderEditor();renderList();};
+    el.appendChild(d);
+  });
+}
+function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function seg(field,val){
+  let h=`<div class="seg" data-field="${field}">`;
+  for(let i=1;i<=5;i++){
+    const sel=(+val===i)?"sel":"";
+    const pass=i>=4?"passhi":"";
+    h+=`<button class="${sel} ${pass}" data-v="${i}">${i}</button>`;
+  }
+  return h+`</div>`;
+}
+function renderEditor(){
+  const ed=$("editor");
+  if(!view.length){ed.innerHTML='<div class="empty">No rows in this view. Toggle <b>Pending only</b> to see reviewed rows.</div>';return;}
+  const o=view[cur].o, fl=flagsFor(o);
+  ed.innerHTML=`
+   <div class="topbar">
+     <div><span style="font-size:18px;font-weight:700">${o.sample_id}</span>
+       <span class="flaglist">${fl.map(badge).join("")||'<span class="b ok">clean</span>'}</span></div>
+     <div class="hint">Row ${cur+1} of ${view.length} in view</div>
+   </div>
+   <div class="fieldgrid" style="margin-top:12px">
+     <div class="card"><h3>English (source — read only)</h3>
+       <div class="english">${escapeHtml(o.english)||'<i class="hint">empty</i>'}</div></div>
+     <div class="card"><h3>Hindi (Devanagari)</h3>
+       <textarea id="hindi" spellcheck="false">${escapeHtml(o.hindi)}</textarea></div>
+     <div class="card"><h3>Hinglish (Roman code-mix)</h3>
+       <textarea id="hinglish" spellcheck="false">${escapeHtml(o.hinglish)}</textarea></div>
+     <div class="card">
+       <h3>Scores (both ≥4 to pass)</h3>
+       <div class="scores">
+         <div class="scorebox"><label>Meaning <kbd>1-5</kbd></label>${seg("meaning_score",o.meaning_score)}</div>
+         <div class="scorebox"><label>Naturalness <kbd>⇧1-5</kbd></label>${seg("naturalness_score",o.naturalness_score)}</div>
+         <div class="scorebox"><label>Surface-sensitivity (opt)</label>${seg("surface_sensitivity_score",o.surface_sensitivity_score)}</div>
+       </div>
+       <h3 style="margin-top:14px">Source</h3>
+       <select id="tsrc">
+         ${["","human","human-edited","gemma3:12b","smoke-placeholder"].map(v=>`<option ${o.translation_source===v?"selected":""} value="${v}">${v||"(unset)"}</option>`).join("")}
+       </select>
+       <h3 style="margin-top:14px">Notes</h3>
+       <textarea id="notes">${escapeHtml(o.notes)}</textarea>
+       <div class="actions">
+         <button class="accept" id="accept">Accept &amp; next <kbd>a</kbd></button>
+         <button class="reject" id="reject">Flag / reject <kbd>r</kbd></button>
+         <button id="prevBtn">‹ Prev <kbd>k</kbd></button>
+         <button id="nextBtn">Next › <kbd>j</kbd></button>
+       </div>
+       <div class="hint" style="margin-top:8px">Accept sets <code>reviewed=true</code> (warns if scores &lt;4) and
+         sets source to <code>human-edited</code> if you changed text.</div>
+     </div>
+   </div>`;
+
+  $("hindi").addEventListener("input",e=>{o.hindi=e.target.value;markDirty();liveFlags();});
+  $("hinglish").addEventListener("input",e=>{o.hinglish=e.target.value;markDirty();liveFlags();});
+  $("notes").addEventListener("input",e=>{o.notes=e.target.value;markDirty();});
+  $("tsrc").addEventListener("change",e=>{o.translation_source=e.target.value;markDirty();});
+  ed.querySelectorAll(".seg").forEach(s=>{
+    s.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+      o[s.dataset.field]=b.dataset.v;markDirty();renderEditor();updateStats();
+    });
+  });
+  $("accept").onclick=accept;
+  $("reject").onclick=reject;
+  $("prevBtn").onclick=()=>move(-1);
+  $("nextBtn").onclick=()=>move(1);
+}
+function liveFlags(){const o=view[cur].o;
+  document.querySelector(".flaglist").innerHTML=flagsFor(o).map(badge).join("")||'<span class="b ok">clean</span>';}
+
+function move(d){cur=Math.min(view.length-1,Math.max(0,cur+d));renderEditor();renderList();
+  $("list").querySelector(".item.active")?.scrollIntoView({block:"nearest"});}
+function accept(){const o=view[cur].o;
+  if(!isPass(o)){if(!confirm("Scores are below 4 (or unset). Mark reviewed anyway?"))return;}
+  o.reviewed="True";
+  if((o.translation_source==""||/gemma|smoke|ollama/i.test(o.translation_source)))o.translation_source="human-edited";
+  markDirty();
+  if(pendingOnly){rebuildView();renderList();if(cur>=view.length)cur=view.length-1;renderEditor();}
+  else{move(1);}
+  updateStats();
+}
+function reject(){const o=view[cur].o;o.reviewed="False";markDirty();
+  rebuildView();renderEditor();renderList();updateStats();
+  $("notes")?.focus();}
+
+function updateStats(){
+  const nRev=rows.filter(isReviewed).length;
+  const nPass=rows.filter(o=>isReviewed(o)&&isPass(o)).length;
+  const nDraft=rows.filter(o=>flagsFor(o).includes("draft")&&!isReviewed(o)).length;
+  $("nReviewed").textContent=nRev;
+  $("nPass").textContent=nPass;
+  $("nDraft").textContent=nDraft;
+  $("barFill").style.width=(nRev/115*100).toFixed(1)+"%";
+  $("mile60").style.left=(60/115*100).toFixed(1)+"%";
+  // counts panel
+  const tally={draft:0,copy:0,disc:0,len:0,script:0,enc:0};
+  rows.forEach(o=>{if(!isReviewed(o))flagsFor(o).forEach(f=>tally[f]++);});
+  $("counts").innerHTML=`Pending flags — `+Object.entries(tally)
+    .map(([k,v])=>`${k}:${v}`).join(" · ");
+}
+
+/* ---------- persistence ---------- */
+function markDirty(){dirty=true;saveLS();setSave();}
+function setSave(){const p=$("saveState");
+  if(!rows.length){p.textContent="no file loaded";p.className="pill";return;}
+  p.textContent=dirty?"unsaved (autosaved locally)":"loaded";
+  p.className="pill "+(dirty?"dirty":"saved");}
+function saveLS(){try{localStorage.setItem(LSKEY,JSON.stringify({fileName,rows}));}catch(e){}}
+function loadFromObjects(objs,name){
+  rows=objs;fileName=name||fileName;cur=0;dirty=false;
+  rebuildView();renderList();renderEditor();updateStats();setSave();
+}
+
+/* ---------- events ---------- */
+$("file").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{const objs=toObjects(parseCSV(r.result));
+    if(!objs.length){alert("No rows parsed. Is this the right CSV?");return;}
+    loadFromObjects(objs,f.name);};
+  r.readAsText(f);
+});
+$("resume").onclick=()=>{
+  try{const s=JSON.parse(localStorage.getItem(LSKEY));
+    if(s&&s.rows){loadFromObjects(s.rows,s.fileName);dirty=true;setSave();}
+    else alert("No autosaved session found.");}catch(e){alert("Could not restore session.");}
+};
+$("export").onclick=()=>{
+  if(!rows.length){alert("Load a CSV first.");return;}
+  const blob=new Blob([serialize(rows)],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=fileName||"reviewed_translations.csv";a.click();
+  dirty=false;setSave();
+};
+$("fPending").onclick=()=>{pendingOnly=!pendingOnly;
+  $("fPending").classList.toggle("on",pendingOnly);
+  $("fPending").textContent=pendingOnly?"Pending only":"Show all";
+  cur=0;rebuildView();renderList();renderEditor();};
+$("sortSel").onclick=()=>{sortMode=sortMode==="priority"?"id":"priority";
+  $("sortSel").textContent="Sort: "+(sortMode==="priority"?"Priority":"sample_id");
+  cur=0;rebuildView();renderList();renderEditor();};
+
+document.addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="s"){e.preventDefault();$("export").click();return;}
+  const tag=(e.target.tagName||"").toLowerCase();
+  const typing=tag==="textarea"||tag==="input"||tag==="select";
+  if(e.key==="Escape"&&typing){e.target.blur();return;}
+  if(typing)return;
+  if(!view.length)return;
+  if(e.key==="j"||e.key==="ArrowDown"){e.preventDefault();move(1);}
+  else if(e.key==="k"||e.key==="ArrowUp"){e.preventDefault();move(-1);}
+  else if(e.key==="a"){e.preventDefault();accept();}
+  else if(e.key==="r"){e.preventDefault();reject();}
+  else if(/^Digit[1-5]$/.test(e.code)){e.preventDefault();
+    const n=e.code.slice(-1), o=view[cur].o;
+    if(e.shiftKey)o.naturalness_score=n;else o.meaning_score=n;
+    markDirty();renderEditor();updateStats();}
+});
+window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue="";}});
+setSave();
+</script>
+</body>
+</html>

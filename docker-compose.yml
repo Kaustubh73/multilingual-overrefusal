@@ -1,0 +1,73 @@
+# Reproducible CPU smoke and GPU full runs.
+#
+# CPU smoke (no GPU, stub inference):
+#   docker compose --profile cpu-smoke run --rm cpu-smoke
+#
+# GPU full track-b (requires NVIDIA Container Toolkit):
+#   docker compose --profile gpu-full run --rm gpu-full
+#
+# Paper replication smoke:
+#   docker compose --profile cpu-replicate run --rm cpu-replicate
+
+services:
+  cpu-smoke:
+    build: .
+    profiles: ["cpu-smoke"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./runs:/app/runs
+      - huggingface_cache:/app/.cache/huggingface
+    environment:
+      OVERREFUSAL_MODEL: ${OVERREFUSAL_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+    command: >
+      python main.py track-b run
+      --limit-per-task 5
+      --smoke-stub
+      --skip-judge
+      --no-report
+
+  cpu-replicate:
+    build: .
+    profiles: ["cpu-replicate"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./runs:/app/runs
+      - huggingface_cache:/app/.cache/huggingface
+    environment:
+      OVERREFUSAL_MODEL: ${OVERREFUSAL_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+    command: >
+      python main.py replicate
+      --limit 5
+      --skip-inference
+      --skip-judge
+      --skip-calibration
+      --no-report
+
+  gpu-full:
+    build: .
+    profiles: ["gpu-full"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./runs:/app/runs
+      - huggingface_cache:/app/.cache/huggingface
+    environment:
+      OVERREFUSAL_MODEL: ${OVERREFUSAL_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: >
+      python main.py track-b run
+      --limit-per-task 5
+      --skip-judge
+      --no-report
+
+volumes:
+  huggingface_cache:

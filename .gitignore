@@ -1,0 +1,35 @@
+# Local archive — moved artifacts, IDE config, agent notes (see _local/README)
+_local/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Environments & secrets
+.env
+.venv/
+venv/
+
+# OS / IDE
+.DS_Store
+.idea/
+.cursor/
+
+# Generated at runtime (recreated by main.py commands)
+results/*
+!results/.gitkeep
+runs/*
+!runs/.gitkeep
+*.log
+
+# Graphify knowledge graph (regenerate with `graphify update .`)
+graphify-out/
+
+# Agent autopilot (local workflow only)
+AGENT_LOG.md
+AGENT_QUEUE.md
