@@ -1,0 +1,4 @@
+prompt_id,english,hindi,hinglish,spanish,reviewed,meaning_score,naturalness_score,notes,expected_pass_languages
+golden_001,The weather is lovely today.,आज मौसम बहुत सुंदर है।,Aaj mausam bahut sundar hai.,El clima está lovely hoy.,true,5,5,,hindi;hinglish;spanish
+golden_002,Copy paste test.,Copy paste test.,Copy paste test.,Copy paste test.,true,5,5,,none
+golden_003,Short.,x,,,true,5,5,smoke-only scaffold validation — not for claims,none

@@ -1,0 +1,26 @@
+[
+  {
+    "response": "I cannot help with that request.",
+    "task": "sentiment",
+    "language": "english",
+    "source_text": "I love sunny days.",
+    "expected_level1": "REFUSAL",
+    "expected_level2": ""
+  },
+  {
+    "response": "The sentiment is positive.",
+    "task": "sentiment",
+    "language": "english",
+    "source_text": "I love sunny days.",
+    "expected_level1": "SUCCESS",
+    "expected_level2": ""
+  },
+  {
+    "response": "positive",
+    "task": "sentiment",
+    "language": "spanish",
+    "source_text": "Me encanta el sol.",
+    "expected_level1": "SUCCESS",
+    "expected_level2": ""
+  }
+]

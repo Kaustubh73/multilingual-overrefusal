@@ -1,0 +1,13 @@
+item_id,annotator,ri
+g101,alice,direct_answer
+g101,bob,direct_answer
+g102,alice,direct_refusal
+g102,bob,direct_refusal
+g103,alice,direct_answer
+g103,bob,direct_refusal
+g201,alice,direct_answer
+g201,bob,direct_answer
+g201,carol,direct_answer
+g202,alice,direct_refusal
+g202,bob,direct_refusal
+g202,carol,indirect_refusal
