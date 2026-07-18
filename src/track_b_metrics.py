@@ -34,13 +34,13 @@ def load_track_b_merged(
     raw = pd.read_csv(raw_path, dtype=str, keep_default_na=False)
     judged = pd.read_csv(judgments_path, dtype=str, keep_default_na=False)
 
-    merge_key = "prompt_id" if "prompt_id" in judged.columns else "sample_id"
-    if merge_key not in judged.columns and "sample_id" in judged.columns:
-        merge_key = "sample_id"
+    # Judge output stores prompt_id-style keys (test_XXX__lang) in its sample_id column.
+    # Rename to prompt_id so we can merge cleanly on prompt_id.
+    judged = judged.rename(columns={"sample_id": "prompt_id"})
 
-    judged_cols = [merge_key, "ri", "judge_model"]
+    judged_cols = ["prompt_id", "ri", "judge_model"]
     judged_cols = [c for c in judged_cols if c in judged.columns]
-    merged = raw.merge(judged[judged_cols], on=merge_key, how="left")
+    merged = raw.merge(judged[judged_cols], on="prompt_id", how="left")
 
     merged["is_benign_task"] = merged["is_benign_task"].astype(str).str.lower().isin(
         ("true", "1", "yes")
@@ -52,18 +52,24 @@ def load_track_b_merged(
 
 
 def compute_track_b_or_table(df: pd.DataFrame) -> pd.DataFrame:
-    """OR_rate by language × task_label."""
+    """OR_rate by language × task_label.
+
+    Denominator is the count of benign-eligible rows (is_benign_task == True),
+    not total rows, since non-benign tasks are not OR-eligible.
+    """
     rows = []
     for (language, task), group in df.groupby(["language", "task_label"], sort=True):
-        n = len(group)
-        or_count = int((group["over_refusal"] & group["is_benign_task"]).sum())
+        benign = group[group["is_benign_task"]]
+        n_benign = len(benign)
+        or_count = int((benign["over_refusal"]).sum())
         rows.append(
             {
                 "language": language,
                 "task": task,
-                "n": n,
+                "n_total": len(group),
+                "n_benign": n_benign,
                 "or_count": or_count,
-                "or_rate": or_count / n if n else 0.0,
+                "or_rate": or_count / n_benign if n_benign else 0.0,
             }
         )
     return pd.DataFrame(rows)
@@ -93,8 +99,8 @@ def compute_delta_or(metrics: pd.DataFrame) -> pd.DataFrame:
         en_overall = metrics[(metrics["language"] == "english")]
         lang_overall = metrics[(metrics["language"] == lang)]
         if len(en_overall) and len(lang_overall):
-            en_rate = en_overall["or_count"].sum() / en_overall["n"].sum()
-            lang_rate = lang_overall["or_count"].sum() / lang_overall["n"].sum()
+            en_rate = en_overall["or_count"].sum() / en_overall["n_benign"].sum()
+            lang_rate = lang_overall["or_count"].sum() / lang_overall["n_benign"].sum()
             rows.append(
                 {
                     "comparison": f"{lang} - english",
@@ -182,7 +188,7 @@ def write_track_b_report(
         "",
         "## OR rate by language × task",
         "",
-        "| language | task | n | or_count | or_rate |",
+        "| language | task | n_benign | or_count | or_rate |",
         "| --- | --- | ---: | ---: | ---: |",
     ]
     metrics_index = metrics.set_index(["language", "task"])
@@ -197,7 +203,7 @@ def write_track_b_report(
                 continue
             row = metrics_index.loc[key]
             lines.append(
-                f"| {language} | {task} | {int(row['n'])} | {int(row['or_count'])} | {row['or_rate']:.2%} |"
+                f"| {language} | {task} | {int(row['n_benign'])} | {int(row['or_count'])} | {row['or_rate']:.2%} |"
             )
 
     lines.extend(["", "## Δ OR (localized − English)", ""])
