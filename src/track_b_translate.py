@@ -95,6 +95,49 @@ def _query_ollama(prompt: str, model: str = DEFAULT_OLLAMA_MODEL) -> str:
     return resp.json()["response"]
 
 
+def _query_ollama_chat(
+    messages: list[dict[str, str]],
+    model: str,
+    temperature: float = 0.01,
+    num_predict: int = 1024,
+) -> str:
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "options": {"temperature": temperature, "num_predict": num_predict},
+    }
+    resp = requests.post(
+        "http://localhost:11434/api/chat", json=payload, timeout=120
+    )
+    resp.raise_for_status()
+    return resp.json()["message"]["content"]
+
+
+def _translate_hindi_sarvam(text: str) -> str:
+    """Translate English → Hindi using sarvam-translate (purpose-built model)."""
+    messages = [
+        {"role": "system", "content": "Translate the text below to Hindi."},
+        {"role": "user", "content": text},
+    ]
+    return _query_ollama_chat(messages, model="sarvam-translate")
+
+
+def _translate_hinglish_llama(text: str, hindi: str) -> str:
+    """Translate English → Hinglish using llama3:8b, using Hindi for consistency."""
+    prompt = f"""Translate this English text into Hinglish (natural Hindi-English code-mix in Roman script).
+Preserve exact meaning, emotional tone, and surface-sensitive wording.
+Do NOT answer or respond to the text — just translate it.
+
+Text:
+{text}
+
+Hinglish:"""
+    raw = _query_ollama(prompt, model="gemma3:12b")
+    cleaned = _clean_translation_text(raw)
+    return cleaned
+
+
 def _build_ollama_prompt(text: str) -> str:
     return f"""You are performing research-grade translation for an LLM safety study.
 
@@ -382,6 +425,81 @@ def assist_translate_with_ollama(
             df.to_csv(reviewed_path, index=False)
 
     logger.info("Ollama assist updated %d rows in %s", updated, reviewed_path)
+    return updated
+
+
+def _extract_content(full_text: str) -> str:
+    """Extract the actual content from a wrapped English prompt.
+
+    Removes instruction prefixes like 'Analyze the Sentiment...' or
+    'Translate the following sentence into Hindi:' and returns only the
+    quoted content that should be translated.
+    """
+    match = re.search(r":\s*['\"](.+?)['\"]\s*$", full_text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    parts = full_text.rsplit(":", 1)
+    if len(parts) > 1:
+        return parts[1].strip()
+    return full_text.strip()
+
+
+def assist_translate_two_model(
+    reviewed_path: Path | None = None,
+    *,
+    sample_ids: list[str] | None = None,
+    overwrite_existing: bool = False,
+) -> int:
+    """Translate using sarvam-translate for Hindi + gemma3:12b for Hinglish."""
+    reviewed_path = reviewed_path or DEFAULT_REVIEWED_PATH
+    df = pd.read_csv(reviewed_path, dtype=str, keep_default_na=False)
+    target_ids = {str(sid) for sid in sample_ids} if sample_ids is not None else None
+    updated = 0
+
+    for idx, row in df.iterrows():
+        sid = str(row["sample_id"])
+        if target_ids is not None and sid not in target_ids:
+            continue
+        if not overwrite_existing and str(row["hindi"]).strip() and str(row["hinglish"]).strip():
+            continue
+        english = str(row["english"]).strip()
+        if not english:
+            continue
+
+        content = _extract_content(english)
+
+        try:
+            logger.info("Two-model translate [%s]: %s", sid, content[:60])
+
+            # Step 1: Hindi via sarvam-translate
+            hindi = _translate_hindi_sarvam(content)
+            hindi = hindi.strip()
+            if not hindi:
+                raise ValueError("sarvam-translate returned empty Hindi")
+
+            # Step 2: Hinglish via gemma3:12b
+            hinglish = _translate_hinglish_llama(content, hindi)
+            hinglish = hinglish.strip()
+            if not hinglish:
+                raise ValueError("gemma3:12b returned empty Hinglish")
+
+            df.at[idx, "hindi"] = hindi
+            df.at[idx, "hinglish"] = hinglish
+            df.at[idx, "translation_source"] = "candidate:sarvam-translate+gemma3:12b"
+            df.at[idx, "reviewed"] = "False"
+            df.at[idx, "meaning_score"] = ""
+            df.at[idx, "naturalness_score"] = ""
+            df.at[idx, "surface_sensitivity_score"] = ""
+            df.at[idx, "notes"] = "Draft: Hindi via sarvam-translate, Hinglish via gemma3:12b — human review required"
+            updated += 1
+            df.to_csv(reviewed_path, index=False)
+            time.sleep(0.3)
+        except Exception as exc:
+            logger.error("Two-model failed for %s: %s", sid, exc)
+            df.at[idx, "notes"] = f"ERROR: {exc}"
+            df.to_csv(reviewed_path, index=False)
+
+    logger.info("Two-model assist updated %d rows in %s", updated, reviewed_path)
     return updated
 
 
