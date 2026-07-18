@@ -33,6 +33,7 @@ graphify-out/
 # Agent autopilot (local workflow only)
 AGENT_LOG.md
 AGENT_QUEUE.md
+AGENTS.md
 
 # Deprecated / dead code (kept on disk, not tracked)
 src/evaluate.py
