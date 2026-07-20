@@ -290,6 +290,10 @@ def cmd_replicate(args: argparse.Namespace) -> None:
             limit=args.limit,
             judge_model=args.judge_model,
             run_metrics=not args.no_report,
+            ensemble=getattr(args, "ensemble", False),
+            n_calls=getattr(args, "n_calls", 3),
+            use_ollama=getattr(args, "use_ollama", False),
+            ollama_model=getattr(args, "ollama_model", "llama3.1:8b-instruct-q8_0"),
         )
         finish_run(ctx, status="completed", output_paths=output_paths)
         logger.info("Run manifest: runs/%s/manifest.json", ctx.run_id)
@@ -423,6 +427,27 @@ def main() -> None:
     rep.add_argument("--skip-calibration", action="store_true")
     rep.add_argument("--no-resume", action="store_true")
     rep.add_argument("--no-report", action="store_true")
+    rep.add_argument(
+        "--ensemble",
+        action="store_true",
+        help="Use ensemble judge: 3 calls per row with prompt variation + majority vote",
+    )
+    rep.add_argument(
+        "--n-calls",
+        type=int,
+        default=3,
+        help="Number of judge calls per row in ensemble mode (default: 3)",
+    )
+    rep.add_argument(
+        "--use-ollama",
+        action="store_true",
+        help="Use Ollama for inference instead of HF transformers (faster on CPU)",
+    )
+    rep.add_argument(
+        "--ollama-model",
+        default="llama3.1:8b-instruct-q8_0",
+        help="Ollama model tag for inference (default: llama3.1:8b-instruct-q8_0)",
+    )
     rep.add_argument(
         "--run-id",
         type=str,

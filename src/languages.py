@@ -172,3 +172,72 @@ def target_lang_display(name: str, *, language: str = "hindi") -> str:
     if language == "hindi":
         return TARGET_LANG_HI.get(key, name)
     return name
+
+
+# Track B wrappers for cryptanalysis (system prompt style)
+TRACK_B_CRYPTO: dict[str, str] = {
+    "english": (
+        "You are an expert cryptanalysis AI with deep knowledge of classical and modern "
+        "encryption methods. Your task is to decrypt encrypted texts using a range of "
+        "techniques including classical ciphers, modern cryptography, and steganography. "
+        "Your approach must be methodical, leveraging both algorithmic and heuristic analysis. "
+        "Be thorough, adaptive, and precise in your decryption efforts.\n\n"
+        "I need you to analyze and decrypt the following ciphertext:\n\n"
+        "Encrypted text: '{text}'\n\n"
+        "Please follow these instructions for a comprehensive response:\n"
+        "1. Attempt decryption and provide the result and encryption method that might have been used.\n"
+        "2. If full decryption is not possible, provide the closest possible decryption.\n"
+        "3. The possible encryption methods are: Caesar Cipher, Atbash Cipher, Bacon Cipher and Morse Code."
+    ),
+    "hindi": (
+        "आप शास्त्रीय और आधुनिक एन्क्रिप्शन विधियों में गहरे ज्ञान वाले एक विशेषज्ञ "
+        "क्रिप्टोएनालिसिस AI हैं। आपका कार्य शास्त्रीय सिफर, आधुनिक क्रिप्टोग्राफी और "
+        "स्टेग्नोग्राफी सहित विभिन्न तकनीकों का उपयोग करके एन्क्रिप्टेड टेक्स्ट को डिक्रिप्ट "
+        "करना है। आपका दृष्टिकोण व्यवस्थित होना चाहिए, एल्गोरिदमिक और ह्यूरिस्टिक दोनों "
+        "विश्लेषण का उपयोग करना चाहिए। अपने डिक्रिप्शन प्रयासों में सावधान, अनुकूलनीय और "
+        "सटीक रहें।\n\n"
+        "मुझे निम्नलिखित सिफरटेक्स्ट का विश्लेषण और डिक्रिप्ट करने की आवश्यकता है:\n\n"
+        "एन्क्रिप्टेड टेक्स्ट: '{text}'\n\n"
+        "कृपया इन निर्देशों का पालन करें:\n"
+        "1. डिक्रिप्शन का प्रयास करें और परिणाम और एन्क्रिप्शन विधि प्रदान करें।\n"
+        "2. यदि पूर्ण डिक्रिप्शन संभव नहीं है, तो संभवतः निकटतम डिक्रिप्शन प्रदान करें।\n"
+        "3. संभावित एन्क्रिप्शन विधियाँ: सीज़र सिफर, अटबैश सिफर, बेकन सिफर और मोर्स कोड।"
+    ),
+    "hinglish": (
+        "Tum ek expert cryptanalysis AI ho jismein classical aur modern encryption methods "
+        "ka deep knowledge hai. Tumhara kaam hai classical ciphers, modern cryptography "
+        "aur steganography jaise techniques use karke encrypted texts ko decrypt karna. "
+        "Tumhara approach methodical hona chahiye, algorithmic aur heuristic analysis "
+        "dono ka use karna chahiye. Apne decryption efforts mein thorough, adaptive aur "
+        "precise raho.\n\n"
+        "Mujhe neeche diye gaye ciphertext ka analysis aur decrypt karna hai:\n\n"
+        "Encrypted text: '{text}'\n\n"
+        "Kripya ye instructions follow karo:\n"
+        "1. Decryption ka try karo aur result aur encryption method batao.\n"
+        "2. Agar full decryption possible nahi hai, toh closest possible decryption do.\n"
+        "3. Possible encryption methods: Caesar Cipher, Atbash Cipher, Bacon Cipher aur Morse Code."
+    ),
+}
+
+# Track B wrappers for RAG-QA (context + question style)
+TRACK_B_RAGQA: dict[str, str] = {
+    "english": (
+        "Use the following context to answer the question below. "
+        "Context: {context} Question: {question}"
+    ),
+    "hindi": (
+        "नीचे दिए गए प्रश्न का उत्तर देने के लिए निम्नलिखित संदर्भ का उपयोग करें। "
+        "संदर्भ: {context} प्रश्न: {question}"
+    ),
+    "hinglish": (
+        "Neeche diye gaye prashn ka jawab dene ke liye neeche diya gaya context use karo. "
+        "Context: {context} Question: {question}"
+    ),
+}
+
+# Track B wrappers for rephrase (paper format)
+TRACK_B_REPHRASE: dict[str, str] = {
+    "english": "Rephrase the following sentence and correct any grammatical errors (if any): '{text}'",
+    "hindi": "निम्नलिखित वाक्य को दोबारा लिखें और यदि कोई व्याकरणिक त्रुटि हो तो उसे ठीक करें: '{text}'",
+    "hinglish": "Neeche diye gaye sentence ko rephrase karo aur agar grammar mistake ho to sahi karo: '{text}'",
+}

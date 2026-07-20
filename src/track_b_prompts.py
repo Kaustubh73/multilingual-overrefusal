@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import pandas as pd
 
-from src.dataset import filter_reviewed
 from src.languages import (
     ALL_LANGUAGES,
     TARGET_LANG_HI,
+    TRACK_B_CRYPTO,
+    TRACK_B_RAGQA,
+    TRACK_B_REPHRASE,
     TRACK_B_SENTIMENT,
     TRACK_B_TRANSLATE,
     target_lang_display,
@@ -20,87 +23,155 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CATALOG_PATH = PROJECT_ROOT / "data" / "track_b" / "track_b_catalog.csv"
+TRANSLATED_BENCHMARK_PATH = PROJECT_ROOT / "data" / "track_b" / "track_b_benchmark_translated.csv"
 
-# Track B catalog languages (core three + extended when translations exist)
-LANGUAGES = ALL_LANGUAGES
-
-
-def wrap_sentiment(text: str, language: str) -> str:
-    if language not in TRACK_B_SENTIMENT:
-        raise ValueError(f"Unknown language: {language}")
-    return TRACK_B_SENTIMENT[language].format(text=text)
+# Track B catalog languages (core three only for now)
+LANGUAGES = ("english", "hindi", "hinglish")
 
 
-def wrap_translate(text: str, target_lang: str, language: str) -> str:
-    if language not in TRACK_B_TRANSLATE:
-        raise ValueError(f"Unknown language: {language}")
-    if language == "english":
-        return TRACK_B_TRANSLATE["english"].format(target_lang=target_lang, text=text)
-    target_hi = target_lang_display(target_lang, language="hindi")
-    return TRACK_B_TRANSLATE[language].format(target_lang_hi=target_hi, text=text)
+def _extract_source_text(plain_text: str, intended_task: str) -> str:
+    """Extract the inner source text from an English prompt."""
+    if intended_task in ("sentiment_analysis",):
+        m = re.search(r"(?:neutral|positive|negative)[\"']:\s*['\"](.+?)['\"]\s*$", plain_text, re.DOTALL)
+        return m.group(1).strip() if m else plain_text
+    if intended_task in ("rephrase",):
+        m = re.search(r"(?:if any)[\"']:\s*['\"](.+?)['\"]\s*$", plain_text, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+        m = re.search(r"['\"](.+?)['\"]\s*$", plain_text, re.DOTALL)
+        return m.group(1).strip() if m else plain_text
+    if intended_task == "translate":
+        m = re.search(r"into\s+\w+:\s*['\"](.+?)['\"]\s*$", plain_text, re.DOTALL)
+        return m.group(1).strip() if m else plain_text
+    if intended_task == "cryptanalysis":
+        m = re.search(r"Encrypted text:\s*['\"](.+?)['\"]", plain_text, re.DOTALL)
+        return m.group(1).strip() if m else plain_text
+    if intended_task == "rag_qa":
+        m = re.search(r"Context:\s*(.*?)\s*Question:\s*(.*)", plain_text, re.DOTALL)
+        if m:
+            return m.group(1).strip(), m.group(2).strip()
+        return plain_text, ""
+    return plain_text
 
 
-def wrap_prompt(
+def _load_translations() -> dict[str, dict]:
+    """Load pre-translated benchmark. Returns {(sample_id, task): row_dict}."""
+    if not TRANSLATED_BENCHMARK_PATH.exists():
+        logger.warning("No pre-translated benchmark at %s — using English fallback", TRANSLATED_BENCHMARK_PATH)
+        return {}
+    df = pd.read_csv(TRANSLATED_BENCHMARK_PATH, dtype=str, keep_default_na=False)
+    lookup: dict[str, dict] = {}
+    for _, row in df.iterrows():
+        key = f"{row['sample_id']}|{row['intended_task']}"
+        lookup[key] = row.to_dict()
+    logger.info("Loaded %d pre-translated entries from %s", len(lookup), TRANSLATED_BENCHMARK_PATH)
+    return lookup
+
+
+def wrap_prompt_full(
     *,
     intended_task: str,
-    source_text: str,
+    plain_text_en: str,
     language: str,
     translate_target_lang: str = "",
-    plain_text_en: str = "",
+    translated_source: str = "",
+    translated_context: str = "",
+    translated_question: str = "",
 ) -> str:
-    """Build localized plain_text for a Track B row."""
+    """Build localized plain_text for any task from the English prompt.
+
+    For non-English languages, uses pre-translated source texts when provided.
+    """
     if language == "english":
         return plain_text_en
 
     if intended_task == "sentiment_analysis":
-        return wrap_sentiment(source_text, language)
+        source = translated_source or _extract_source_text(plain_text_en, "sentiment_analysis")
+        return TRACK_B_SENTIMENT[language].format(text=source)
+
+    if intended_task == "rephrase":
+        source = translated_source or _extract_source_text(plain_text_en, "rephrase")
+        return TRACK_B_REPHRASE[language].format(text=source)
+
     if intended_task == "translate":
-        return wrap_translate(source_text, translate_target_lang, language)
+        source = translated_source or _extract_source_text(plain_text_en, "translate")
+        target_hi = target_lang_display(translate_target_lang, language="hindi")
+        return TRACK_B_TRANSLATE[language].format(target_lang_hi=target_hi, text=source)
+
+    if intended_task == "cryptanalysis":
+        source = translated_source or _extract_source_text(plain_text_en, "cryptanalysis")
+        return TRACK_B_CRYPTO[language].format(text=source)
+
+    if intended_task == "rag_qa":
+        if translated_context and translated_question:
+            context, question = translated_context, translated_question
+        else:
+            context, question = _extract_source_text(plain_text_en, "rag_qa")
+        return TRACK_B_RAGQA[language].format(context=context, question=question)
+
     raise ValueError(f"Unsupported intended_task: {intended_task}")
 
 
-def build_track_b_catalog(
-    selected_df: pd.DataFrame,
-    reviewed_df: pd.DataFrame,
+def build_full_track_b_catalog(
+    bench_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    One row per (sample_id, language) for reviewed translations.
+    """Build full Track B catalog: 270 rows × 3 languages = 810 rows.
 
-    English uses original plain_text; Hindi/Hinglish use localized wrappers.
+    Uses pre-translated source texts for Hindi/Hinglish when available.
     """
-    reviewed = filter_reviewed(reviewed_df)
-    if reviewed.empty:
-        logger.warning("No reviewed translations; catalog will be empty.")
-        return pd.DataFrame()
+    trans = _load_translations()
+    use_translations = len(trans) > 0
+    if not use_translations:
+        logger.warning("No pre-translations available — prompts will use English source text")
 
-    rev_by_id = reviewed.set_index("sample_id")
     rows: list[dict] = []
 
-    for _, sel in selected_df.iterrows():
-        sid = str(sel["sample_id"])
-        if sid not in rev_by_id.index:
-            continue
-        rev = rev_by_id.loc[sid]
-        intended_task = str(sel["intended_task"])
-        translate_target = str(sel.get("translate_target_lang", ""))
+    for _, row in bench_df.iterrows():
+        sid = str(row["sample_id"])
+        intended_task = str(row["intended_task"])
+        plain_text_en = str(row["plain_text"])
+        text_type = str(row["text_type"])
+        task_label = str(row.get("task_label", ""))
+        is_benign = bool(row.get("is_benign_task", False))
+
+        # Extract translate target language from prompt
+        translate_target = ""
+        if intended_task == "translate":
+            m = re.search(r"into\s+(\w+):", plain_text_en)
+            translate_target = m.group(1) if m else ""
+
+        # Look up pre-translated source texts
+        tkey = f"{sid}|{intended_task}"
+        trow = trans.get(tkey, {}) if use_translations else {}
 
         for lang in LANGUAGES:
-            if lang == "english":
-                localized_text = str(sel["plain_text"])
-                source_for_row = str(sel["source_text"])
+            # Get translated source text for this language
+            if lang == "hindi":
+                ts = trow.get("source_text_hi", "")
+                tc = trow.get("context_hi", "")
+                tq = trow.get("question_hi", "")
+            elif lang == "hinglish":
+                ts = trow.get("source_text_hl", "")
+                tc = trow.get("context_hl", "")
+                tq = trow.get("question_hl", "")
             else:
-                if lang not in rev.index:
-                    continue
-                localized_source = str(rev[lang]).strip()
-                if not localized_source:
-                    continue
-                localized_text = wrap_prompt(
-                    intended_task=intended_task,
-                    source_text=localized_source,
-                    language=lang,
-                    translate_target_lang=translate_target,
-                )
-                source_for_row = localized_source
+                ts, tc, tq = "", "", ""
+
+            localized_text = wrap_prompt_full(
+                intended_task=intended_task,
+                plain_text_en=plain_text_en,
+                language=lang,
+                translate_target_lang=translate_target,
+                translated_source=ts,
+                translated_context=tc,
+                translated_question=tq,
+            )
+
+            # Flag degenerate translate rows (Hindi/Hinglish prompt → Hindi target)
+            is_degenerate = False
+            if intended_task == "translate" and lang != "english":
+                if translate_target.lower() == "hindi":
+                    is_degenerate = True
 
             rows.append(
                 {
@@ -108,34 +179,21 @@ def build_track_b_catalog(
                     "sample_id": sid,
                     "language": lang,
                     "plain_text": localized_text,
-                    "source_text": source_for_row,
-                    "text_type": sel["text_type"],
+                    "text_type": text_type,
                     "intended_task": intended_task,
-                    "task_label": sel["task_label"],
-                    "is_benign_task": sel["is_benign_task"],
+                    "task_label": task_label,
+                    "is_benign_task": str(is_benign),
                     "translate_target_lang": translate_target,
-                    "priority_tier": sel.get("priority_tier", ""),
+                    "is_degenerate_translate": str(is_degenerate),
                 }
             )
 
     catalog = pd.DataFrame(rows)
     logger.info(
-        "Built Track B catalog: %d rows (%d sample_ids × up to %d langs)",
+        "Built full Track B catalog: %d rows (%d sample_ids × %d langs) [translations: %s]",
         len(catalog),
-        catalog["sample_id"].nunique() if len(catalog) else 0,
+        catalog["sample_id"].nunique(),
         len(LANGUAGES),
+        "ON" if use_translations else "OFF",
     )
-    return catalog
-
-
-def write_track_b_catalog(
-    selected_df: pd.DataFrame,
-    reviewed_df: pd.DataFrame,
-    out_path: Path | None = None,
-) -> pd.DataFrame:
-    out_path = out_path or DEFAULT_CATALOG_PATH
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    catalog = build_track_b_catalog(selected_df, reviewed_df)
-    catalog.to_csv(out_path, index=False)
-    logger.info("Saved Track B catalog (%d rows) to %s", len(catalog), out_path)
     return catalog

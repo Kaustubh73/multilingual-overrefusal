@@ -68,8 +68,10 @@ def run_paper_inference(
     out_path: Path | None = None,
     resume: bool = True,
     limit: int | None = None,
+    use_ollama: bool = False,
+    ollama_model: str = "llama3.1:8b-instruct-q8_0",
 ) -> pd.DataFrame:
-    """Run HF inference on official plain_text prompts."""
+    """Run HF or Ollama inference on official plain_text prompts."""
     out_path = out_path or DEFAULT_RAW_PATH
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -83,7 +85,18 @@ def run_paper_inference(
         existing = pd.read_csv(out_path, dtype=str, keep_default_na=False)
         rows.extend(existing.to_dict("records"))
 
-    set_model_id(model_id)
+    if use_ollama:
+        from src.refusal_judge import ollama_judge_chat
+        generate_fn = lambda prompt: ollama_judge_chat(
+            prompt, model=ollama_model, timeout_sec=300.0
+        )
+        resolved_model = ollama_model
+    else:
+        set_model_id(model_id)
+        from src.inference import generate_response
+        generate_fn = lambda prompt: generate_response(prompt, model_id=model_id)
+        resolved_model = model_id
+
     total = len(bench)
 
     for i, (_, row) in enumerate(bench.iterrows(), start=1):
@@ -92,15 +105,16 @@ def run_paper_inference(
             continue
         prompt = str(row["plain_text"])
         logger.info(
-            "Paper inference [%d/%d] %s task=%s type=%s",
+            "Paper inference [%d/%d] %s task=%s type=%s model=%s",
             i,
             total,
             sid,
             row["intended_task"],
             row["text_type"],
+            resolved_model,
         )
         try:
-            response = generate_response(prompt, model_id=model_id)
+            response = generate_fn(prompt)
         except Exception as exc:
             logger.error("Inference failed for %s: %s", sid, exc)
             response = f"[INFERENCE_ERROR: {exc}]"
@@ -113,7 +127,7 @@ def run_paper_inference(
                 "intended_task": row["intended_task"],
                 "task_label": row["task_label"],
                 "is_benign_task": row["is_benign_task"],
-                "model": model_id,
+                "model": resolved_model,
                 "response": response,
             }
         )
@@ -137,10 +151,18 @@ def cmd_replicate_pipeline(
     limit: int | None = None,
     judge_model: str = "gpt-oss:20b",
     run_metrics: bool = True,
+    ensemble: bool = False,
+    n_calls: int = 3,
+    use_ollama: bool = False,
+    ollama_model: str = "llama3.1:8b-instruct-q8_0",
 ) -> None:
     """Full replication: infer → calibrate judge → judge → metrics report."""
     from src.paper_metrics import write_replication_report
-    from src.refusal_judge import calibrate_vs_manual, judge_responses_df
+    from src.refusal_judge import (
+        calibrate_vs_manual,
+        judge_responses_df,
+        judge_responses_ensemble_df,
+    )
 
     raw_path = raw_path or DEFAULT_RAW_PATH
     judgments_path = judgments_path or (PROJECT_ROOT / "results" / "paper_judgments.csv")
@@ -152,6 +174,8 @@ def cmd_replicate_pipeline(
             out_path=raw_path,
             resume=resume,
             limit=limit,
+            use_ollama=use_ollama,
+            ollama_model=ollama_model,
         )
     elif not raw_path.exists():
         logger.error("Missing %s; run inference first.", raw_path)
@@ -179,12 +203,23 @@ def cmd_replicate_pipeline(
         raw_df = pd.read_csv(raw_path, dtype=str, keep_default_na=False)
         if limit is not None:
             raw_df = raw_df.head(limit)
-        judge_responses_df(
-            raw_df,
-            model=judge_model,
-            out_path=judgments_path,
-            resume=resume,
-        )
+
+        if ensemble:
+            logger.info("Using ensemble judge (%d calls per row)...", n_calls)
+            judge_responses_ensemble_df(
+                raw_df,
+                model=judge_model,
+                out_path=judgments_path,
+                resume=resume,
+                n_calls=n_calls,
+            )
+        else:
+            judge_responses_df(
+                raw_df,
+                model=judge_model,
+                out_path=judgments_path,
+                resume=resume,
+            )
     elif not judgments_path.exists():
         logger.error("Missing %s; run judge step first.", judgments_path)
         sys.exit(1)

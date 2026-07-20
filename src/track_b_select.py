@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import pandas as pd
 
 from src.dataset import extract_quoted_text
 from src.paper_benchmark import load_paper_benchmark
-from src.replication_failure_audit import TRANSLATE_LANG_RE
+
+TRANSLATE_LANG_RE = re.compile(r"(?:to|in|into)\s+(?:the\s+)?(\w[\w\s]*?)\s*[.:,]", re.IGNORECASE)
 
 logger = logging.getLogger(__name__)
 

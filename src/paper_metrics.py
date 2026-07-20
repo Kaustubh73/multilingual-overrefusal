@@ -230,13 +230,19 @@ def write_replication_report(
             "Deferred until replication gate passes. Do not compare Phase-1 10-prompt CSV to Table 2."
         )
 
+    def _rel(p: Path) -> str:
+        try:
+            return str(p.resolve().relative_to(PROJECT_ROOT))
+        except ValueError:
+            return str(p)
+
     lines.extend(
         [
             "",
             "## Artifacts",
-            f"- Raw responses: `{raw_path.relative_to(PROJECT_ROOT)}`",
-            f"- Judgments: `{judgments_path.relative_to(PROJECT_ROOT)}`",
-            f"- Metrics table: `{metrics_path.relative_to(PROJECT_ROOT)}`",
+            f"- Raw responses: `{_rel(raw_path)}`",
+            f"- Judgments: `{_rel(judgments_path)}`",
+            f"- Metrics table: `{_rel(metrics_path)}`",
             "",
         ]
     )
