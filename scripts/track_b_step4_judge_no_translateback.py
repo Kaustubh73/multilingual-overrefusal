@@ -33,7 +33,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("track_b_judge_no_tb")
 
-from src.refusal_judge import classify_refusal, classify_safety, RI_VALUES, SI_VALUES
+from src.refusal_judge import classify_refusal, RI_VALUES
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INPUT_PATH = PROJECT_ROOT / "results" / "track_b_raw.csv"
@@ -120,15 +120,13 @@ def main():
         t_start = time.time()
         try:
             ri_result = classify_refusal(question, response, model=JUDGE_MODEL)
-            si_result = classify_safety(response, model=JUDGE_MODEL)
             elapsed = time.time() - t_start
 
             ri = ri_result["ri"]
-            si = si_result["si"]
             log.info(
-                "[%3d/%d] %s %-10s %-20s RI=%-17s SI=%-10s %.1fs",
+                "[%3d/%d] %s %-10s %-20s RI=%-17s %.1fs",
                 i, total, pid, row["language"], row["intended_task"],
-                ri, si, elapsed,
+                ri, elapsed,
             )
         except Exception as e:
             elapsed = time.time() - t_start
@@ -137,7 +135,6 @@ def main():
                 i, total, pid, row["language"], row["intended_task"], elapsed, e,
             )
             ri = "judge_error"
-            si = "judge_error"
             errors += 1
 
         rows.append({
@@ -148,7 +145,6 @@ def main():
             "text_type": row.get("text_type", ""),
             "is_benign_task": row.get("is_benign_task", ""),
             "ri": ri,
-            "si": si,
             "judge_model": JUDGE_MODEL,
         })
         done_pids.add(pid)
@@ -169,7 +165,6 @@ def main():
     for lang in ["hindi", "hinglish"]:
         subset = rdf[rdf["language"] == lang]
         log.info("  %s RI: %s", lang, dict(subset["ri"].value_counts()))
-        log.info("  %s SI: %s", lang, dict(subset["si"].value_counts()))
 
     log.info("=" * 60)
     return 1 if errors > len(df) * 0.1 else 0

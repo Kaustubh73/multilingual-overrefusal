@@ -26,7 +26,7 @@ log = logging.getLogger("track_b_ablation_compare")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 RAW_PATH = PROJECT_ROOT / "results" / "track_b_raw.csv"
-JUDGMENTS_TB_PATH = PROJECT_ROOT / "results" / "track_b_judgments_with_si.csv"
+JUDGMENTS_TB_PATH = PROJECT_ROOT / "results" / "track_b_judgments.csv"
 JUDGMENTS_NO_TB_PATH = PROJECT_ROOT / "results" / "track_b_judgments_no_translateback.csv"
 OUT_PATH = PROJECT_ROOT / "results" / "track_b_ablation_report.md"
 
@@ -46,8 +46,6 @@ ABLOATION_CONFIG = {
 
 
 def load_and_filter() -> tuple[pd.DataFrame, pd.DataFrame]:
-    raw = pd.read_csv(RAW_PATH, dtype=str, keep_default_na=False)
-
     # With translate-back (backfilled SI)
     if not JUDGMENTS_TB_PATH.exists():
         log.error(
@@ -57,15 +55,6 @@ def load_and_filter() -> tuple[pd.DataFrame, pd.DataFrame]:
     jt = pd.read_csv(JUDGMENTS_TB_PATH, dtype=str, keep_default_na=False)
     jt = jt[jt["language"].isin(TARGET_LANGS)].copy()
     jt = jt[~jt["intended_task"].isin(SKIP_TASKS)].copy()
-    jt = jt.merge(
-        raw[["sample_id", "is_benign_task"]],
-        on="sample_id",
-        how="left",
-        suffixes=("", "_raw"),
-    )
-    if "is_benign_task_raw" in jt.columns:
-        jt["is_benign_task"] = jt["is_benign_task_raw"].fillna(jt["is_benign_task"])
-        jt.drop(columns=["is_benign_task_raw"], inplace=True, errors="ignore")
 
     # Without translate-back (new judgments with RI + SI)
     if not JUDGMENTS_NO_TB_PATH.exists():
@@ -185,18 +174,25 @@ def main():
             lines.append(fmt_row([lang.capitalize(), label] + counts))
     lines.append("")
 
-    # Table 4: SI distribution
-    lines.append("## Table 4: SI Distribution")
-    lines.append("")
-    si_vals = ["benign", "cautious", "harmful"]
-    lines.append(fmt_row(["Language", "Condition"] + si_vals))
-    lines.append(divider([10, 20, 10, 10, 10]))
-    for lang in TARGET_LANGS:
-        for label, df, in [("With TB", jt), ("No TB", jnt)]:
-            vc = distribution_table(df, "si", lang)
-            counts = [str(vc.get(v, 0)) for v in si_vals]
-            lines.append(fmt_row([lang.capitalize(), label] + counts))
-    lines.append("")
+    # Table 4: SI distribution (only if SI column exists in both)
+    has_si = "si" in jt.columns and "si" in jnt.columns
+    if has_si:
+        lines.append("## Table 4: SI Distribution")
+        lines.append("")
+        si_vals = ["benign", "cautious", "harmful"]
+        lines.append(fmt_row(["Language", "Condition"] + si_vals))
+        lines.append(divider([10, 20, 10, 10, 10]))
+        for lang in TARGET_LANGS:
+            for label, df in [("With TB", jt), ("No TB", jnt)]:
+                vc = distribution_table(df, "si", lang)
+                counts = [str(vc.get(v, 0)) for v in si_vals]
+                lines.append(fmt_row([lang.capitalize(), label] + counts))
+        lines.append("")
+    else:
+        lines.append("## Table 4: SI Distribution")
+        lines.append("")
+        lines.append("*SI not yet computed for both conditions. Run SI backfill + no-TB judge to populate.*")
+        lines.append("")
 
     # Table 5: Delta OR
     lines.append("## Table 5: Delta OR (No TB minus With TB)")
