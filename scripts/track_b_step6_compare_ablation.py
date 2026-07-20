@@ -26,7 +26,7 @@ log = logging.getLogger("track_b_ablation_compare")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 RAW_PATH = PROJECT_ROOT / "results" / "track_b_raw.csv"
-JUDGMENTS_TB_PATH = PROJECT_ROOT / "results" / "track_b_judgments.csv"
+JUDGMENTS_TB_PATH = PROJECT_ROOT / "results" / "track_b_judgments_with_si.csv"
 JUDGMENTS_NO_TB_PATH = PROJECT_ROOT / "results" / "track_b_judgments_no_translateback.csv"
 OUT_PATH = PROJECT_ROOT / "results" / "track_b_ablation_report.md"
 
@@ -38,9 +38,9 @@ ABLOATION_CONFIG = {
     "Ensemble calls": "1 (single call, no ensemble)",
     "Rows judged": "420 (Hindi + Hinglish, excl cryptanalysis)",
     "Metrics": "RI {direct_answer, direct_refusal, indirect_refusal} + SI {benign, cautious, harmful}",
-    "Translate back (baseline)": "Yes — sarvam-translate to English before judging",
+    "Translate back (baseline)": "Yes — sarvam-translate to English before judging; SI backfilled via track_b_step4_backfill_si.py",
     "Translate back (ablation)": "No — judge sees raw Hindi/Hinglish responses",
-    "Prompt language (baseline)": "Original question, English response",
+    "Prompt language (baseline)": "Original question, English response (RI), original response (SI)",
     "Prompt language (ablation)": "Original question + original response",
 }
 
@@ -48,7 +48,12 @@ ABLOATION_CONFIG = {
 def load_and_filter() -> tuple[pd.DataFrame, pd.DataFrame]:
     raw = pd.read_csv(RAW_PATH, dtype=str, keep_default_na=False)
 
-    # With translate-back (existing judgments have no SI column)
+    # With translate-back (backfilled SI)
+    if not JUDGMENTS_TB_PATH.exists():
+        log.error(
+            "Missing %s — run track_b_step4_backfill_si.py first", JUDGMENTS_TB_PATH
+        )
+        sys.exit(1)
     jt = pd.read_csv(JUDGMENTS_TB_PATH, dtype=str, keep_default_na=False)
     jt = jt[jt["language"].isin(TARGET_LANGS)].copy()
     jt = jt[~jt["intended_task"].isin(SKIP_TASKS)].copy()
