@@ -35,6 +35,9 @@ AGENT_LOG.md
 AGENT_QUEUE.md
 AGENTS.md
 
+# Sent outreach (do not commit)
+docs/*.docx
+
 # Deprecated / dead code (kept on disk, not tracked)
 src/evaluate.py
 src/apply_manual_audit.py
