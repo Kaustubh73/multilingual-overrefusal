@@ -1,0 +1,58 @@
+{
+  "n_rows": 253584,
+  "n_seeds": 1761,
+  "langs": [
+    "en",
+    "es",
+    "pt",
+    "ja",
+    "zh",
+    "ar",
+    "th",
+    "hi",
+    "id",
+    "tr",
+    "ur",
+    "yo",
+    "sw",
+    "ne",
+    "mt",
+    "lo"
+  ],
+  "tasks": [
+    "no_task",
+    "sentiment_analysis",
+    "rephrase",
+    "summarize",
+    "translate",
+    "pos_tagging",
+    "word_shuffling",
+    "character_counting",
+    "keyword_extraction"
+  ],
+  "mt_engine_default": "googletranslate_sheets",
+  "pipeline_version": "dataset-pipeline-v1.1-localized",
+  "templates_path": "data/dataset_v2/templates_localized.json",
+  "translate_target_map": {
+    "en": "ur",
+    "es": "yo",
+    "pt": "sw",
+    "ja": "ne",
+    "zh": "mt",
+    "ar": "lo",
+    "th": "en",
+    "hi": "es",
+    "id": "pt",
+    "tr": "ja",
+    "ur": "zh",
+    "yo": "ar",
+    "sw": "th",
+    "ne": "hi",
+    "mt": "id",
+    "lo": "tr"
+  },
+  "paths": {
+    "parquet": "data/dataset_v2/final_gt_full.parquet",
+    "csv": "data/dataset_v2/final_gt_full.csv"
+  }
+}

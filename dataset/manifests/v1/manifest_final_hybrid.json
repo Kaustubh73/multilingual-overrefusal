@@ -1,0 +1,54 @@
+{
+  "n_rows": 211320,
+  "n_seeds": 1761,
+  "langs": [
+    "en",
+    "es",
+    "fr",
+    "de",
+    "ja",
+    "zh",
+    "ar",
+    "ru",
+    "th",
+    "hi",
+    "id",
+    "tr",
+    "yo",
+    "sw",
+    "ne"
+  ],
+  "tasks": [
+    "no_task",
+    "sentiment_analysis",
+    "rephrase",
+    "summarize",
+    "translate",
+    "pos_tagging",
+    "word_shuffle",
+    "character_counting"
+  ],
+  "mt_engine_default": "googletranslate_sheets",
+  "pipeline_version": "dataset-pipeline-v1",
+  "translate_target_map": {
+    "en": "yo",
+    "es": "sw",
+    "fr": "ne",
+    "de": "en",
+    "ja": "es",
+    "zh": "fr",
+    "ar": "de",
+    "ru": "ja",
+    "th": "zh",
+    "hi": "ar",
+    "id": "ru",
+    "tr": "th",
+    "yo": "hi",
+    "sw": "id",
+    "ne": "tr"
+  },
+  "paths": {
+    "parquet": "/home/kaustubhg73/Desktop/Speshal/projects/multilingual-overrefusal/data/dataset_v1/final_hybrid.parquet",
+    "csv": "/home/kaustubhg73/Desktop/Speshal/projects/multilingual-overrefusal/data/dataset_v1/final_hybrid.csv"
+  }
+}

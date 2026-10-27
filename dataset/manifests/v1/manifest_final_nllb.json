@@ -1,0 +1,57 @@
+{
+  "n_rows": 211320,
+  "n_seeds": 1761,
+  "langs": [
+    "en",
+    "es",
+    "fr",
+    "de",
+    "ja",
+    "zh",
+    "ar",
+    "ru",
+    "th",
+    "hi",
+    "id",
+    "tr",
+    "yo",
+    "sw",
+    "ne"
+  ],
+  "tasks": [
+    "no_task",
+    "sentiment_analysis",
+    "rephrase",
+    "summarize",
+    "translate",
+    "pos_tagging",
+    "word_shuffling",
+    "character_counting"
+  ],
+  "mt_engine_default": "nllb-200-distilled-600M",
+  "pipeline_version": "dataset-pipeline-v1.1-localized",
+  "templates_path": "/home/kaustubhg73/Desktop/Speshal/projects/multilingual-overrefusal/data/dataset_v1/templates_localized.json",
+  "translate_target_map": {
+    "en": "yo",
+    "es": "sw",
+    "fr": "ne",
+    "de": "en",
+    "ja": "es",
+    "zh": "fr",
+    "ar": "de",
+    "ru": "ja",
+    "th": "zh",
+    "hi": "ar",
+    "id": "ru",
+    "tr": "th",
+    "yo": "hi",
+    "sw": "id",
+    "ne": "tr"
+  },
+  "paths": {
+    "parquet": "/home/kaustubhg73/Desktop/Speshal/projects/multilingual-overrefusal/data/dataset_v1/final_nllb.parquet",
+    "csv": "/home/kaustubhg73/Desktop/Speshal/projects/multilingual-overrefusal/data/dataset_v1/final_nllb.csv"
+  },
+  "canonical": false,
+  "role": "nllb_content_localized_wrappers"
+}
