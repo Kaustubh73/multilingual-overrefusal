@@ -1,5 +1,26 @@
-# Local archive — moved artifacts, IDE config, agent notes (see _local/README)
+# Data and run outputs (dataset lives on the Hugging Face Hub)
+data/
+results/*
+!results/.gitkeep
+runs/*
+!runs/.gitkeep
+figures/*.png
+
+# Local only: notes, logs, papers, archives, agent files
 _local/
+docs/
+logs/
+papers/
+*.pdf
+*.docx
+MEMORY.md
+_MISSING.html
+AGENTS.md
+AGENT_LOG.md
+AGENT_QUEUE.md
+.agent/
+.cursor/
+graphify-out/
 
 # Python
 __pycache__/
@@ -9,6 +30,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .ipynb_checkpoints/
+*.log
 
 # Environments & secrets
 .env
@@ -18,30 +40,3 @@ venv/
 # OS / IDE
 .DS_Store
 .idea/
-.cursor/
-
-# Generated at runtime (recreated by main.py commands)
-results/*
-!results/.gitkeep
-runs/*
-!runs/.gitkeep
-*.log
-
-# Graphify knowledge graph (regenerate with `graphify update .`)
-graphify-out/
-
-# Agent autopilot (local workflow only)
-AGENT_LOG.md
-AGENT_QUEUE.md
-AGENTS.md
-
-# Deprecated / dead code (kept on disk, not tracked)
-src/evaluate.py
-src/apply_manual_audit.py
-src/manual_audit.py
-src/replication_failure_audit.py
-src/track_b_select_v2.py
-data/translations/translate_with_ollama.py
-data/results/
-data/track_b/translation_review_template.csv
-data/track_b/selected_rows_v2.csv
