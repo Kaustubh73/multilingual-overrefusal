@@ -29,6 +29,23 @@ TRANSLATED_BENCHMARK_PATH = PROJECT_ROOT / "data" / "track_b" / "track_b_benchma
 LANGUAGES = ("english", "hindi", "hinglish")
 
 
+def _strip_crypto_examples(plain_text: str) -> str:
+    """Strip worked examples from English cryptanalysis prompts.
+
+    The HuggingFace dataset includes 4 worked examples (~1400 chars) in English
+    cryptanalysis prompts that Hindi/Hinglish versions don't have. This makes
+    English prompts 2.5x longer, which could affect refusal behavior.
+
+    Example block starts with 'Here are examples of encrypted texts' and continues
+    to the end of the prompt.
+    """
+    marker = "Here are examples of encrypted texts"
+    idx = plain_text.find(marker)
+    if idx >= 0:
+        return plain_text[:idx].rstrip()
+    return plain_text
+
+
 def _extract_source_text(plain_text: str, intended_task: str) -> str:
     """Extract the inner source text from an English prompt."""
     if intended_task in ("sentiment_analysis",):
@@ -166,6 +183,11 @@ def build_full_track_b_catalog(
                 translated_context=tc,
                 translated_question=tq,
             )
+
+            # Strip worked examples from English cryptanalysis prompts to
+            # make them comparable in length to Hindi/Hinglish versions.
+            if lang == "english" and intended_task == "cryptanalysis":
+                localized_text = _strip_crypto_examples(localized_text)
 
             # Flag degenerate translate rows (Hindi/Hinglish prompt → Hindi target)
             is_degenerate = False

@@ -34,9 +34,11 @@ def load_track_b_merged(
     raw = pd.read_csv(raw_path, dtype=str, keep_default_na=False)
     judged = pd.read_csv(judgments_path, dtype=str, keep_default_na=False)
 
-    # Judge output stores prompt_id-style keys (test_XXX__lang) in its sample_id column.
-    # Rename to prompt_id so we can merge cleanly on prompt_id.
-    judged = judged.rename(columns={"sample_id": "prompt_id"})
+    # Both files have prompt_id (e.g., "test_0000__english"). Merge on prompt_id.
+    # If judgments file only has sample_id, rename to prompt_id for compatibility.
+    if "prompt_id" not in judged.columns and "sample_id" in judged.columns:
+        # Legacy format: judgments use sample_id as prompt_id
+        judged = judged.rename(columns={"sample_id": "prompt_id"})
 
     judged_cols = ["prompt_id", "ri", "judge_model"]
     judged_cols = [c for c in judged_cols if c in judged.columns]
@@ -54,35 +56,60 @@ def load_track_b_merged(
 def compute_track_b_or_table(df: pd.DataFrame) -> pd.DataFrame:
     """OR_rate by language × task_label.
 
-    Denominator is the count of benign-eligible rows (is_benign_task == True),
-    not total rows, since non-benign tasks are not OR-eligible.
+    Per-task denominator: total rows in that task (paper Eq. 9).
+    Since each task is either fully benign or fully non-benign, this equals
+    n_benign for benign tasks and gives 0 for non-benign tasks.
+
+    Also appends OVERALL rows per language using total N denominator.
     """
     rows = []
     for (language, task), group in df.groupby(["language", "task_label"], sort=True):
-        benign = group[group["is_benign_task"]]
-        n_benign = len(benign)
-        or_count = int((benign["over_refusal"]).sum())
+        n = len(group)
+        # Paper Eq. 9: numerator counts refusals only on benign tasks
+        or_count = int((group["over_refusal"] & group["is_benign_task"]).sum())
         rows.append(
             {
                 "language": language,
                 "task": task,
-                "n_total": len(group),
-                "n_benign": n_benign,
+                "n_total": n,
+                "n_benign": int(group["is_benign_task"].sum()),
                 "or_count": or_count,
-                "or_rate": or_count / n_benign if n_benign else 0.0,
+                "or_rate": or_count / n if n else 0.0,
             }
         )
+
+    # Append OVERALL rows per language (paper Eq. 9 denominator = all rows)
+    for language in df["language"].unique():
+        lang_df = df[df["language"] == language]
+        n = len(lang_df)
+        or_count = int((lang_df["over_refusal"] & lang_df["is_benign_task"]).sum())
+        rows.append(
+            {
+                "language": language,
+                "task": "OVERALL",
+                "n_total": n,
+                "n_benign": int(lang_df["is_benign_task"].sum()),
+                "or_count": or_count,
+                "or_rate": or_count / n if n else 0.0,
+            }
+        )
+
     return pd.DataFrame(rows)
 
 
 def compute_delta_or(metrics: pd.DataFrame) -> pd.DataFrame:
-    """Δ OR (Hindi − English) and (Hinglish − English) per task and overall."""
+    """Δ OR (Hindi − English) and (Hinglish − English) per task and overall.
+
+    Uses OVERALL rows from metrics table (paper Eq. 9 denominator).
+    """
     rows = []
     english = metrics[metrics["language"] == "english"].set_index("task")
 
     for lang in ("hindi", "hinglish"):
         lang_df = metrics[metrics["language"] == lang].set_index("task")
         for task in sorted(set(english.index) | set(lang_df.index)):
+            if task == "OVERALL":
+                continue  # handled below
             en_rate = float(english.loc[task, "or_rate"]) if task in english.index else None
             lang_rate = float(lang_df.loc[task, "or_rate"]) if task in lang_df.index else None
             if en_rate is not None and lang_rate is not None:
@@ -96,11 +123,10 @@ def compute_delta_or(metrics: pd.DataFrame) -> pd.DataFrame:
                     }
                 )
 
-        en_overall = metrics[(metrics["language"] == "english")]
-        lang_overall = metrics[(metrics["language"] == lang)]
-        if len(en_overall) and len(lang_overall):
-            en_rate = en_overall["or_count"].sum() / en_overall["n_benign"].sum()
-            lang_rate = lang_overall["or_count"].sum() / lang_overall["n_benign"].sum()
+        # Overall delta from OVERALL rows
+        if "OVERALL" in english.index and "OVERALL" in lang_df.index:
+            en_rate = float(english.loc["OVERALL", "or_rate"])
+            lang_rate = float(lang_df.loc["OVERALL", "or_rate"])
             rows.append(
                 {
                     "comparison": f"{lang} - english",
@@ -188,22 +214,34 @@ def write_track_b_report(
         "",
         "## OR rate by language × task",
         "",
-        "| language | task | n_benign | or_count | or_rate |",
-        "| --- | --- | ---: | ---: | ---: |",
+        "| language | task | n_total | n_benign | or_count | or_rate |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
     ]
     metrics_index = metrics.set_index(["language", "task"])
     report_languages = [lang for lang in ALL_LANGUAGES if lang in metrics["language"].unique()]
     if not report_languages:
         report_languages = list(CORE_LANGUAGES)
     for language in report_languages:
-        for task in TRACK_B_TASK_LABELS:
+        # Per-task rows (skip OVERALL for now)
+        for task in sorted(metrics[metrics["language"] == language]["task"].unique()):
+            if task == "OVERALL":
+                continue
             key = (language, task)
             if key not in metrics_index.index:
-                lines.append(f"| {language} | {task} | 0 | 0 | — |")
+                lines.append(f"| {language} | {task} | 0 | 0 | 0 | — |")
                 continue
             row = metrics_index.loc[key]
             lines.append(
-                f"| {language} | {task} | {int(row['n_benign'])} | {int(row['or_count'])} | {row['or_rate']:.2%} |"
+                f"| {language} | {task} | {int(row['n_total'])} | {int(row['n_benign'])} "
+                f"| {int(row['or_count'])} | {row['or_rate']:.2%} |"
+            )
+        # OVERALL row
+        key = (language, "OVERALL")
+        if key in metrics_index.index:
+            row = metrics_index.loc[key]
+            lines.append(
+                f"| **{language}** | **OVERALL** | **{int(row['n_total'])}** | "
+                f"**{int(row['n_benign'])}** | **{int(row['or_count'])}** | **{row['or_rate']:.2%}** |"
             )
 
     lines.extend(["", "## Δ OR (localized − English)", ""])
@@ -222,10 +260,6 @@ def write_track_b_report(
                 f"| {row['comparison']} | {row['task']} | {row['delta_or']:+.2%} | "
                 f"{row['english_or_rate']:.2%} | {row[localized_col]:.2%} |"
             )
-        for task in TRACK_B_TASK_LABELS:
-            if task not in set(deltas["task"].astype(str)):
-                for lang in ("hindi", "hinglish"):
-                    lines.append(f"| {lang} - english | {task} | — | — | — |")
     else:
         lines.append("- Insufficient data for delta computation.")
 
