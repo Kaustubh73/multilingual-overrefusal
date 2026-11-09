@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multilingual-overrefusal"
+version = "0.1.0"
+description = "Refusal and over-refusal of LLMs across languages and tasks"
+requires-python = ">=3.11"
+# Core needs only the standard library (config is TOML, read with tomllib).
+dependencies = []
+
+[project.optional-dependencies]
+# Pin exact versions in requirements.txt for a real run; these are lower bounds.
+data = ["pandas>=2.0", "numpy>=1.26", "datasets>=2.18", "huggingface_hub>=0.21", "requests>=2.31"]
+gpu  = ["torch>=2.1", "transformers>=4.40", "accelerate>=0.27", "sentencepiece>=0.2"]
+mlx  = ["mlx-lm"]
+plot = ["matplotlib>=3.8", "scipy>=1.11"]
+dev  = ["pytest>=8.0", "ruff"]
+
+[project.scripts]
+multilingual-overrefusal = "multilingual_overrefusal.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
