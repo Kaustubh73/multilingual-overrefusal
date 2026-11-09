@@ -1,6 +1,7 @@
 """Command line: `multilingual-overrefusal run configs/<name>.toml [--only STEP] [--force STEP] [--set a.b=c]`."""
 import argparse
 
+from . import generation, hand_tagging, judges  # noqa: F401  (importing a stage module registers its steps)
 from .runner import apply_overrides, load_config, run
 
 

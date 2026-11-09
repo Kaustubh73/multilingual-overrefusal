@@ -24,6 +24,9 @@ multilingual-overrefusal = "multilingual_overrefusal.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+multilingual_overrefusal = ["templates/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

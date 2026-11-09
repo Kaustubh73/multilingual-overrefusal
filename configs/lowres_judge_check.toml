@@ -1,6 +1,4 @@
 # Do the judges agree with hand tags on ur/lo/mt/yo outputs? (formerly "E1b")
-# Steps are registered by their modules as the old scripts are merged in; until then
-# `run` rejects this config with a clear "unknown step" message.
 name = "lowres_judge_check"
 seed = 0
 output_dir = "results/lowres_judge_check"   # run.json (git hash, seed, command) goes here
@@ -13,9 +11,9 @@ tasks = "all"
 seeds_per_cell = 5
 
 [generate]
-models = ["qwen3.5-9b", "aya-expanse-8b", "gemma3-12b"]
+models = ["qwen3.5-9b", "gemma-4-e4b", "llama-3.1-8b", "aya-expanse-8b"]
 backend = "mlx"          # mlx | ollama | llamacpp | modal
-max_new_tokens = 128
+max_new_tokens = 512
 temperature = 0.0
 
 [judge]
