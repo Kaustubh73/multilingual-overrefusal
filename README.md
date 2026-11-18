@@ -11,6 +11,7 @@ Work in progress: nothing here is a final result.
 | `translation_qa/` | Back-translation and intent checks of the translated prompts |
 | `scripts/` | Harmful-prompt screen, judges (gpt-oss, Qwen3Guard), multilingual judge, hand-tagging UI and scoring |
 | `figures/` | Figure scripts (PNGs are not tracked) |
+| `docs/n30-grid.md` | N=30 grid results and activation analysis (pilot), with caveats |
 | `data/`, `results/`, `runs/` | Gitignored. Data comes from the Hub, see below |
 
 ## Data
