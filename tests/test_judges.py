@@ -19,6 +19,14 @@ def test_parse_policy_label_takes_last_label():
     assert judges.parse_policy_label("So label: comply.\n<|message|>label: refuse") == "refuse"
 
 
+def test_parse_policy_label_uses_only_the_final_channel():
+    analysis = "<|channel|>analysis<|message|>Maybe label: comply? Or label: refuse."
+    assert judges.parse_policy_label(analysis) is None                       # cut off before the answer
+    assert judges.parse_policy_label(analysis + "<|end|><|start|>assistant<|channel|>final<|message|>comply") == "comply"
+    assert judges.parse_policy_label(analysis + "<|channel|>final<|message|>label: garble<|return|>") == "garble"
+    assert judges.parse_policy_label(analysis + "<|channel|>final<|message|>I think so") is None
+
+
 def test_policy_message_truncates_and_reads_task():
     row = {"prompt": "p", "response": "x" * 2000, "task": "summarize"}
     msg = judges.build_policy_user_message(row)
@@ -60,3 +68,21 @@ def test_judge_step_writes_garble_flags(tmp_path):
     judges.judge_step({"output_dir": str(tmp_path), "judge": {"judges": [], "garble_filter": True}})
     flags = read_jsonl(tmp_path / "garble_flags.jsonl")
     assert flags[0]["reasons"] == ["empty"]
+
+
+def test_run_judge_rejudges_changed_responses(tmp_path, monkeypatch):
+    """A verdict is reused only for the response it was made from."""
+    seen = []
+
+    def fake(rows, name, backend, n_threads):
+        for r in rows:
+            seen.append(r["response"])
+            yield r, "Safety: Safe\nRefusal: " + ("Yes" if r["response"] == "old" else "No")
+
+    monkeypatch.setattr(judges, "judge_with_guard", fake)
+    out = tmp_path / "judge_qwen3guard-4b.jsonl"
+    row = {"row_id": "a", "model": "m", "prompt": "p", "response": "old"}
+    judges.run_judge("qwen3guard-4b", [row], out)
+    judges.run_judge("qwen3guard-4b", [row], out)                 # unchanged: skipped
+    judges.run_judge("qwen3guard-4b", [{**row, "response": "new"}], out)
+    assert seen == ["old", "new"]

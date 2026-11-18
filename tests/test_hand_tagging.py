@@ -1,6 +1,7 @@
 import math
 
 from multilingual_overrefusal import hand_tagging as ht
+from multilingual_overrefusal.judges import judge_input_hash
 
 
 def test_statistics_known_values():
@@ -125,7 +126,8 @@ def _cfg(tmp_path, langs=("ur", "lo"), models=("mA", "mB"), per=30):
                 rid = f"{lang}-{i}"
                 rows.append({"row_id": rid, "model": m, "lang": lang, "task": "t", "prompt": f"p {rid}",
                              "response": f"r {rid} {m}"})
-                qg.append({"row_id": rid, "model": m, "verdict": "refuse" if i % 3 == 0 else "comply"})
+                qg.append({"row_id": rid, "model": m, "verdict": "refuse" if i % 3 == 0 else "comply",
+                           "input_hash": judge_input_hash("qwen3guard-4b", rows[-1])})
     (tmp_path / "responses.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     (tmp_path / "judge_qwen3guard-4b.jsonl").write_text("\n".join(json.dumps(r) for r in qg) + "\n")
     return {"name": "t", "seed": 0, "output_dir": str(tmp_path), "steps": ["hand_tag", "report"],

@@ -5,7 +5,6 @@ stage (judges, generation, ...) registers its steps here as it is merged in. Unt
 name in a config fails at startup, before any compute is spent.
 """
 import subprocess
-import sys
 import tomllib
 from pathlib import Path
 from typing import Callable
@@ -58,18 +57,25 @@ def _marker(out_dir: Path, name: str) -> Path:
 
 
 def run(cfg: dict, only: str | None = None, force: list[str] = ()) -> None:
-    """Run the configured steps. A step is skipped if its .done marker exists, unless forced."""
+    """Run the configured steps. A step is skipped if its .done marker exists, unless forced.
+
+    Running a step clears the .done markers of every step after it, so outputs built on the old
+    result are rebuilt on the next run instead of being skipped as done.
+    """
     out_dir = Path(cfg["output_dir"])
     seed = cfg.get("seed", 0)
     set_seed(seed)
     write_run_json(out_dir, cfg, seed)
-    for name in cfg["steps"]:
+    steps = cfg["steps"]
+    for i, name in enumerate(steps):
         if only and name != only:
             continue
         if _marker(out_dir, name).exists() and name not in force and name != only:
             print(f"skip {name} (already done)")
             continue
         print(f"run  {name}")
+        for later in steps[i + 1:]:
+            _marker(out_dir, later).unlink(missing_ok=True)
         STEPS[name](cfg)
         _marker(out_dir, name).parent.mkdir(parents=True, exist_ok=True)
         _marker(out_dir, name).touch()

@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Callable
 
 from .io import append_jsonl, read_jsonl
-from .judges import _responses_path
+from .judges import _responses_path, expected_judge_hashes
 from .runner import step
 
 LABELS = ("comply", "refuse", "garble")
@@ -522,10 +522,17 @@ def ci_text(pair) -> str:
     return f"[{f3(pair[0])}, {f3(pair[1])}]"
 
 
-def judge_verdicts(path) -> dict[str, str | None]:
-    """'model|row_id' -> verdict. A later record wins, but an unparsed (None) one never replaces a valid one."""
+def judge_verdicts(path, expected: dict[tuple, str] | None = None) -> dict[str, str | None]:
+    """'model|row_id' -> verdict. A later record wins, but an unparsed (None) one never replaces a valid one.
+
+    expected: (row_id, model) -> judge input hash for the current responses. When given, records
+    for other rows or made from older inputs are ignored, so a stale verdict cannot stand in for a
+    response that was regenerated.
+    """
     out: dict[str, str | None] = {}
     for r in read_jsonl(path):
+        if expected is not None and expected.get((r["row_id"], r.get("model"))) != r.get("input_hash"):
+            continue
         k = f"{r.get('model')}|{r['row_id']}"
         if r.get("verdict") is None and out.get(k) is not None:
             continue
@@ -688,6 +695,12 @@ def _load_rows(cfg: dict) -> dict[str, dict]:
     return {_composite(r): {**r, "model_id": r.get("model")} for r in read_jsonl(_responses_path(cfg))}
 
 
+def _expected(cfg: dict, judge: str, rows: dict[str, dict]) -> dict[tuple, str]:
+    """Judge input hashes for the current responses, with the judge settings from the config."""
+    j = cfg.get("judge", {})
+    return expected_judge_hashes(judge, list(rows.values()), j.get("backend", "mlx"), j.get("max_tokens"))
+
+
 def _draw_sheet(cfg: dict, tag_dir: Path) -> None:
     c = cfg.get("hand_tag", {})
     judges = cfg.get("judge", {}).get("judges", [])
@@ -695,7 +708,8 @@ def _draw_sheet(cfg: dict, tag_dir: Path) -> None:
     if not strata_judge:
         raise ValueError("hand_tag needs a judge to stratify by: set hand_tag.strata_judge or judge.judges")
     rows = _load_rows(cfg)
-    verdict = judge_verdicts(Path(cfg["output_dir"]) / f"judge_{strata_judge}.jsonl")
+    verdict = judge_verdicts(Path(cfg["output_dir"]) / f"judge_{strata_judge}.jsonl",
+                             _expected(cfg, strata_judge, rows))
 
     def stratum_of(cid, r):
         v = verdict.get(cid)
@@ -747,8 +761,8 @@ def report_step(cfg: dict) -> None:
         raise SystemExit(f"{len(missing)}/{len(key['items'])} items untagged; finish tagging first "
                          "(or set report.partial = true)")
     rows = _load_rows(cfg)
-    verdicts = {n: judge_verdicts(out_dir / f"judge_{n}.jsonl") for n in cfg.get("judge", {}).get("judges", [])
-                if (out_dir / f"judge_{n}.jsonl").exists()}
+    verdicts = {n: judge_verdicts(out_dir / f"judge_{n}.jsonl", _expected(cfg, n, rows))
+                for n in cfg.get("judge", {}).get("judges", []) if (out_dir / f"judge_{n}.jsonl").exists()}
     flags_path = out_dir / "garble_flags.jsonl"
     flags = {_composite(r): r.get("reasons", []) for r in read_jsonl(flags_path)} if flags_path.exists() else None
     text, result = score_against_judges(key, labels, verdicts, rows, flags)

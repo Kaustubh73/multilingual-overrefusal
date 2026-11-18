@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 from .config import TASKS
-from .io import append_jsonl, already_done_ids, read_jsonl
+from .io import append_jsonl, input_hash, latest_matching, read_jsonl
 from .runner import step
 
 BATCH_SIZE = 16   # MLX batch size. Padding changes float rounding, so keep one size per output file.
@@ -165,14 +165,17 @@ def ollama_chat(model: str, prompt: str, max_tokens: int, seed: int = 0, tempera
     return json.load(urllib.request.urlopen(req, timeout=900))["message"].get("content", "")
 
 
-def _gen_mlx(key: str, model_id: str, todo: list[dict], out: Path, max_tokens: int, batch_size: int) -> None:
+def _gen_mlx(key: str, model_id: str, todo: list[dict], out: Path, max_tokens: int, batch_size: int,
+             hashes: dict) -> None:
     from mlx_lm import load
     print(f"[{key}] loading {model_id}; {len(todo)} prompts (batch {batch_size})", flush=True)
     model, tok = load(model_id)
     texts = [render_chat(tok, r["prompt"]) for r in todo]
     t0 = time.time()
     for i, resp in generate_in_batches(model, tok, texts, max_tokens, batch_size):
-        append_jsonl(out, [{"row_id": todo[i]["row_id"], "model": key, "response": resp, "batch": batch_size}])
+        rid = todo[i]["row_id"]
+        append_jsonl(out, [{"row_id": rid, "model": key, "response": resp, "batch": batch_size,
+                            "input_hash": hashes[rid]}])
         if i % batch_size == batch_size - 1:
             print(f"[{key}] {i + 1}/{len(todo)} {time.time() - t0:.0f}s", flush=True)
     del model
@@ -184,16 +187,16 @@ def _gen_mlx(key: str, model_id: str, todo: list[dict], out: Path, max_tokens: i
 
 
 def _gen_ollama(key: str, model_id: str, todo: list[dict], out: Path, max_tokens: int, seed: int,
-                temperature: float) -> None:
+                temperature: float, hashes: dict) -> None:
     for r in todo:
         t0 = time.time()
         resp = ollama_chat(model_id, r["prompt"], max_tokens, seed, temperature)
         append_jsonl(out, [{"row_id": r["row_id"], "model": key, "response": resp,
-                            "latency_s": round(time.time() - t0, 1)}])
+                            "latency_s": round(time.time() - t0, 1), "input_hash": hashes[r["row_id"]]}])
 
 
 def _gen_llamacpp(key: str, model_id: str, todo: list[dict], out: Path, max_tokens: int, seed: int,
-                  port: int = 8099) -> None:
+                  hashes: dict, port: int = 8099) -> None:
     """Start llama-server on a Hugging Face GGUF (`repo:quant`), greedy via top_k=1, stop it afterwards."""
     log = open(out.with_suffix(".server.log"), "ab")
     srv = subprocess.Popen(["llama-server", "-hf", model_id, "--port", str(port), "--jinja", "-c", "2048",
@@ -215,7 +218,7 @@ def _gen_llamacpp(key: str, model_id: str, todo: list[dict], out: Path, max_toke
             req = urllib.request.Request(base + "/v1/chat/completions", body, {"Content-Type": "application/json"})
             resp = json.load(urllib.request.urlopen(req, timeout=300))["choices"][0]["message"]["content"]
             append_jsonl(out, [{"row_id": r["row_id"], "model": key, "response": resp,
-                                "latency_s": round(time.time() - t0, 1)}])
+                                "latency_s": round(time.time() - t0, 1), "input_hash": hashes[r["row_id"]]}])
     finally:
         srv.terminate()
 
@@ -245,28 +248,47 @@ def generate_step(cfg: dict) -> None:
         if backend in ("mlx", "llamacpp") and g.get("temperature", 0.0) != 0:
             raise ValueError(f"{backend} generation is greedy only; got temperature={g['temperature']}")
         out = out_dir / f"gen_{key}.jsonl"
-        done = already_done_ids(out)
+        hashes = _gen_hashes(sample, backend, model_id, g, seed)
+        done = latest_matching(read_jsonl(out), lambda rec: rec["row_id"], hashes)
         todo = [r for r in sample if r["row_id"] not in done]
         if not todo:
             continue
         if backend == "mlx":
-            _gen_mlx(key, model_id, todo, out, max_tokens, g.get("batch_size", BATCH_SIZE))
+            _gen_mlx(key, model_id, todo, out, max_tokens, g.get("batch_size", BATCH_SIZE), hashes)
         elif backend == "ollama":
-            _gen_ollama(key, model_id, todo, out, max_tokens, seed, g.get("temperature", 0.0))
+            _gen_ollama(key, model_id, todo, out, max_tokens, seed, g.get("temperature", 0.0), hashes)
         elif backend == "llamacpp":
-            _gen_llamacpp(key, model_id, todo, out, max_tokens, seed)
+            _gen_llamacpp(key, model_id, todo, out, max_tokens, seed, hashes)
         else:
             raise ValueError(f"backend {backend!r} is not supported here (mlx | ollama | llamacpp)")
-    _write_responses(out_dir, sample, g["models"])
+    _write_responses(out_dir, sample, g["models"], {key: _gen_hashes(sample, *resolve_model(key, g), g, seed)
+                                                    for key in g["models"]})
 
 
-def _write_responses(out_dir: Path, sample: list[dict], models: list[str]) -> None:
-    """responses.jsonl = every sample field + model + response, in model then sample order."""
-    by_id = {r["row_id"]: r for r in sample}
+def _gen_hashes(sample: list[dict], backend: str, model_id: str, g: dict, seed: int) -> dict:
+    """row_id -> hash of everything that decides the reply: prompt, model, backend and decoding settings.
+    A generation record is reused on resume only if its hash matches, so an edited prompt, a new
+    sample or a changed setting is regenerated instead of silently kept."""
+    settings = {"backend": backend, "model_id": model_id, "max_new_tokens": g.get("max_new_tokens", 128),
+                "temperature": g.get("temperature", 0.0), "seed": seed}
+    if backend == "mlx":
+        settings["batch_size"] = g.get("batch_size", BATCH_SIZE)   # padding changes the output
+    return {r["row_id"]: input_hash(r["prompt"], settings) for r in sample}
+
+
+def _write_responses(out_dir: Path, sample: list[dict], models: list[str], hashes: dict[str, dict]) -> None:
+    """responses.jsonl = every sample field + model + response, in model then sample order.
+
+    hashes: model key -> {row_id: input hash}. Only the latest generation made from the current
+    inputs is used; records for rows no longer in the sample, or from older inputs, are left out.
+    """
     rows = []
     for key in models:
-        for gen in read_jsonl(out_dir / f"gen_{key}.jsonl"):
-            rows.append({**by_id[gen["row_id"]], **gen})
+        gens = latest_matching(read_jsonl(out_dir / f"gen_{key}.jsonl"), lambda rec: rec["row_id"], hashes[key])
+        missing = [r["row_id"] for r in sample if r["row_id"] not in gens]
+        if missing:
+            raise RuntimeError(f"{key}: {len(missing)} sample rows have no current generation (e.g. {missing[0]})")
+        rows += [{**r, **gens[r["row_id"]]} for r in sample]
     (out_dir / "responses.jsonl").write_text(
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
     print(f"{len(rows)} responses -> {out_dir / 'responses.jsonl'}")
